@@ -32,14 +32,17 @@ $localTXList = getHeardList($reverseLogLinesMMDVM);
    </thead>
    <tbody>	
 <?php
-$counter = 0;
 for ($i = 0; $i < count($localTXList); $i++) {
 		$listElem = $localTXList[$i];		
 		if ($listElem[5] == "RF" && ($listElem[1]=="D-Star" || startsWith($listElem[1], "DMR") || $listElem[1]=="YSF")) {
 			echo"<tr>";
 			echo"<td nowrap>$listElem[0]</td>";
 			echo"<td nowrap>$listElem[1]</td>";
-			echo"<td nowrap>$listElem[2]</td>";
+			if (constant("SHOWQRZ") && $listElem[2] !== "??????????" && !is_numeric($listElem[2])) {
+				echo"<td nowrap><a target=\"_new\" href=\"https://qrz.com/db/$listElem[2]\">".str_replace("0","&Oslash;",$listElem[2])."</a></td>";
+			} else {
+				echo"<td nowrap>".str_replace("0","&Oslash;",$listElem[2])."</td>";
+			}
 			if (defined("ENABLEXTDLOOKUP")) {
 				echo "<td class=\"nowrap\">".getName($listElem[2])."</td>";
 			}
@@ -56,12 +59,10 @@ for ($i = 0; $i < count($localTXList); $i++) {
 				echo"<td nowrap>$listElem[8]</td>";
 			}
 			echo"</tr>\n";
-			$counter++;
 		}
 	}
 
 ?>
-   
   </tbody>
   </table>
  </div>

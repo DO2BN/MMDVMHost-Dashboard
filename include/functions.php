@@ -1,7 +1,7 @@
 <?php
 
 function getMMDVMHostVersion() {
-	// returns creation-time of MMDVMHost as version-number
+	// returns creation-time or version of MMDVMHost as version-number
 	$filename = MMDVMHOSTPATH."/MMDVMHost";
 	exec($filename." -v 2>&1", $output);
 	if (!startsWith(substr($output[0],18,8),"20")) {
@@ -15,7 +15,7 @@ function getMMDVMHostFileVersion() {
 	// returns creation-time of MMDVMHost as version-number
 	$filename = MMDVMHOSTPATH."/MMDVMHost";
 	if (file_exists($filename)) {
-		return date("d M y", filectime($filename));
+		return date("d M Y", filectime($filename));
 	}
 }
 
@@ -32,7 +32,7 @@ function getMMDVMConfig() {
 }
 
 function getYSFGatewayConfig() {
-	// loads MMDVM.ini into array for further use
+	// loads YSFGateway.ini into array for further use
 	$conf = array();
 	if ($configs = fopen(YSFGATEWAYINIPATH."/".YSFGATEWAYINIFILENAME, 'r')) {
 		while ($config = fgets($configs)) {
@@ -58,7 +58,6 @@ function getConfigItem($section, $key, $configs) {
 		}
 		$sectionpos++;
 	}
-	
 	return substr($configs[$sectionpos], strlen($key) + 1);
 }
 
@@ -111,29 +110,23 @@ function showMode($mode, $mmdvmconfigs) {
 
 function getMMDVMLog() {
 	// Open Logfile and copy loglines into LogLines-Array()
-	$logLines = array();
-	if ($log = fopen(MMDVMLOGPATH."/".MMDVMLOGPREFIX."-".date("Y-m-d").".log", 'r')) {
-		while ($logLine = fgets($log)) {
-			if (!strpos($logLine, "Debug") && !strpos($logLine,"Received a NAK") && !startsWith($logLine,"I:") && !startsWith($logLine,"E:")) {
-				array_push($logLines, $logLine);
-			}
-		}
-		fclose($log);
-	}
+	$logPath = MMDVMLOGPATH."/".MMDVMLOGPREFIX."-".date("Y-m-d").".log";
+	$logLines = explode("\n", `grep M: $logPath`);
+	return $logLines;
+}
+
+function getShortMMDVMLog() {
+	// Open Logfile and copy loglines into LogLines-Array()
+	$logPath = MMDVMLOGPATH."/".MMDVMLOGPREFIX."-".date("Y-m-d").".log";
+	//$logLines = explode("\n", `tail -n100 $logPath`);
+	$logLines = explode("\n", `egrep -h "from|end|watchdog" $logPath | tail -4`);
 	return $logLines;
 }
 
 function getYSFGatewayLog() {
 	// Open Logfile and copy loglines into LogLines-Array()
-	$logLines = array();
-	if ($log = fopen(YSFGATEWAYLOGPATH."/".YSFGATEWAYLOGPREFIX."-".date("Y-m-d").".log", 'r')) {
-		while ($logLine = fgets($log)) {
-			if (startsWith($logLine,"D:")) {
-				array_push($logLines, $logLine);
-			}
-		}
-		fclose($log);
-	}
+	$logPath = YSFGATEWAYLOGPATH."/".YSFGATEWAYLOGPREFIX."-".date("Y-m-d").".log";
+	$logLines = explode("\n", `grep D: $logPath`);
 	return $logLines;
 }
 
@@ -142,8 +135,7 @@ function getYSFGatewayLog() {
 // M: 2016-04-29 00:15:00.013 D-Star, received network header from DG9VH   /ZEIT to CQCQCQ   via DCS002 S
 // M: 2016-04-29 19:43:21.839 DMR Slot 2, received network voice header from DL1ESZ to TG 9
 // M: 2016-04-30 14:57:43.072 DMR Slot 2, received RF voice header from DG9VH to 5000
-function getHeardList($logLines) {
-	//array_multisort($logLines,SORT_DESC);
+function getHeardList($logLines, $onlyLast) {
 	$heardList = array();
 	$ts1duration = "";
 	$ts1loss = "";
@@ -173,7 +165,6 @@ function getHeardList($logLines) {
 		} else if(strpos($logLine,"overflow in the DMR slot RF queue")) {
 			continue;
 		}
-
 		
 		if(strpos($logLine,"end of") || strpos($logLine,"watchdog has expired") || strpos($logLine,"ended RF data") || strpos($logLine,"ended network")) {
 			$lineTokens = explode(", ",$logLine);
@@ -279,16 +270,19 @@ function getHeardList($logLines) {
 			$duration = "";
 			$loss ="";
 			$ber = "";
+			if ($onlyLast && count($heardList )> 4) {
+				return $heardList;
+			}
 		}
 	}
 	return $heardList;
 }
 
-function getLastHeard($logLines) {
+function getLastHeard($logLines, $onlyLast) {
 	//returns last heard list from log
 	$lastHeard = array();
 	$heardCalls = array();
-	$heardList = getHeardList($logLines);
+	$heardList = getHeardList($logLines, $onlyLast);
 	$counter = 0;
 	foreach ($heardList as $listElem) {
 		if ( ($listElem[1] == "D-Star") || ($listElem[1] == "YSF") || (startsWith($listElem[1], "DMR")) ) {
@@ -296,10 +290,7 @@ function getLastHeard($logLines) {
 				array_push($heardCalls, $listElem[2]."#".$listElem[1].$listElem[3]);
 				array_push($lastHeard, $listElem);
 				$counter++;
-			}/*
-			if ($counter == LHLINES) {
-				return $lastHeard;
-			}*/
+			}
 		}
 	}
 	return $lastHeard;
@@ -448,8 +439,6 @@ function getActualReflector($logLines, $mode) {
 //M: 2016-05-02 07:04:10.504 D-Star link status set to "Verlinkt zu DCS002 S"
 //M: 2016-04-03 16:16:18.638 DMR Slot 2, received network voice header from 4000 to 2625094
 //M: 2016-04-03 19:30:03.099 DMR Slot 2, received network voice header from 4020 to 2625094
-	//array_multisort($logLines,SORT_DESC);
-	
     foreach ($logLines as $logLine) {
 		if(substr($logLine, 27, strpos($logLine,",") - 27) == "DMR Slot 2") {
 			$from = substr($logLine, strpos($logLine,"from") + 5, strpos($logLine,"to") - strpos($logLine,"from") - 6);
@@ -461,6 +450,17 @@ function getActualReflector($logLines, $mode) {
 					return "Reflector ".$from;
 				}
 			} 
+			$source = "RF";
+			if (strpos($logLine,"network") > 0 ) {
+				$source = "Net";
+			}
+			
+			if ( $source == "RF") {
+				$to = substr($logLine, strpos($logLine, "to") + 3);
+				if (strlen($to) == 5 && startsWith($to, "4")) {
+					return "Reflector ".$to." (not cfmd)";
+				}
+			}
 		}
 	}
 	return "Reflector not linked";
@@ -513,18 +513,5 @@ function getName($callsign) {
 	$name = substr($output[0], strpos($output[0],$delimiter)+1);
 	$name = substr($name, strpos($name,$delimiter)+1);
 	return $name;
-}
-
-//Some basic inits
-$mmdvmconfigs = getMMDVMConfig();
-$logLinesMMDVM = getMMDVMLog();
-$reverseLogLinesMMDVM = $logLinesMMDVM;
-array_multisort($reverseLogLinesMMDVM,SORT_DESC);
-$lastHeard = getLastHeard($reverseLogLinesMMDVM);
-if (defined("ENABLEYSFGATEWAY")) {
-	$YSFGatewayconfigs = getYSFGatewayConfig();
-	$logLinesYSFGateway = getYSFGatewayLog();
-	$reverseLogLinesYSFGateway = $logLinesYSFGateway;
-	array_multisort($reverseLogLinesYSFGateway,SORT_DESC);
 }
 ?>
